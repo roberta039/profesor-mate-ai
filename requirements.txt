@@ -1,4 +1,4 @@
 streamlit
-langchain-groq
-langchain_core
-python-dotenv
+langchain-google-genai
+langchain-core
+pillow
