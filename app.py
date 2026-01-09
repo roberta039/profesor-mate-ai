@@ -3,12 +3,10 @@ import google.generativeai as genai
 from PIL import Image
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesorul de Mate (Gemini)", page_icon="🎓")
-st.title("🎓 Proful de Mate - Gemini Native")
-st.caption("Rezolvă probleme din poze folosind biblioteca oficială Google")
+st.set_page_config(page_title="Profesorul de Mate (Universal)", page_icon="🎓")
+st.title("🎓 Proful de Mate - Selector Modele")
 
 # 2. Configurare API Key
-# Încercăm să luăm cheia din Secrets, altfel o cerem în sidebar
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
@@ -21,67 +19,71 @@ if not api_key:
 # Configurare Google GenAI
 try:
     genai.configure(api_key=api_key)
-    # Inițializăm modelul cu instrucțiuni de sistem (Persona)
-    model = genai.GenerativeModel(
-        'gemini-1.5-flash',
-        system_instruction="""Ești un profesor de matematică expert și răbdător.
-        1. Când primești o imagine, analizează ecuațiile sau geometria din ea.
-        2. Rezolvă problema pas cu pas.
-        3. Explică logica într-un mod simplu, în limba română.
-        4. Folosește LaTeX pentru formule matematice clare.
-        """
-    )
 except Exception as e:
-    st.error(f"Eroare la configurare: {e}")
+    st.error(f"Eroare la configurare cheie: {e}")
     st.stop()
 
+# --- ZONA DE DEBUGGING (Găsirea modelelor) ---
+st.sidebar.header("⚙️ Setări Model")
+
+@st.cache_data # Salvăm lista ca să nu o cerem la fiecare click
+def get_available_models():
+    try:
+        model_list = []
+        for m in genai.list_models():
+            # Căutăm modele care suportă generare de conținut
+            if 'generateContent' in m.supported_generation_methods:
+                model_list.append(m.name)
+        return model_list
+    except Exception as e:
+        st.sidebar.error(f"Nu pot lista modelele: {e}")
+        return ["models/gemini-1.5-flash"] # Fallback
+
+available_models = get_available_models()
+selected_model_name = st.sidebar.selectbox("Alege Modelul:", available_models, index=0)
+
+# Inițializăm modelul ales
+try:
+    model = genai.GenerativeModel(
+        selected_model_name,
+        system_instruction="""Ești un profesor de matematică expert. 
+        Rezolvă problemele pas cu pas. Explică clar în limba română. 
+        Folosește LaTeX pentru formule."""
+    )
+except Exception as e:
+    st.error(f"Eroare la inițializarea modelului {selected_model_name}: {e}")
+
 # 3. Interfața de Upload
-st.sidebar.header("Zona de Lucru")
-uploaded_file = st.sidebar.file_uploader("Încarcă o poză cu problema", type=["jpg", "jpeg", "png"])
+st.sidebar.header("📁 Materiale")
+uploaded_file = st.sidebar.file_uploader("Încarcă o poză", type=["jpg", "jpeg", "png"])
 
 img = None
 if uploaded_file:
-    # Încărcăm imaginea folosind PIL (Pillow)
     img = Image.open(uploaded_file)
-    st.sidebar.image(img, caption="Imaginea ta", use_container_width=True)
-    st.sidebar.success("Imagine pregătită!")
+    st.sidebar.image(img, caption="Imagine încărcată", use_container_width=True)
 
-# 4. Istoric Chat
+# 4. Chat History
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [
-        {"role": "assistant", "content": "Salut! Sunt gata. Poți să încarci o poză sau să scrii o problemă."}
-    ]
+    st.session_state["messages"] = [{"role": "assistant", "content": f"Salut! Folosesc modelul {selected_model_name}. Cu ce te ajut?"}]
 
 for msg in st.session_state.messages:
-    # Google folosește "model" în loc de "assistant" în unele contexte, dar noi păstrăm convenția vizuală
-    role = msg["role"]
-    st.chat_message(role).write(msg["content"])
+    st.chat_message(msg["role"]).write(msg["content"])
 
-# 5. Input și Generare
-if user_input := st.chat_input("Întreabă profesorul..."):
-    # Afișăm mesajul utilizatorului
+# 5. Input
+if user_input := st.chat_input("Scrie problema..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    # Pregătim inputul pentru Gemini
-    # Gemini acceptă o listă care poate conține text și imagini
     inputs = [user_input]
     if img:
         inputs.append(img)
-        note = " (analizez imaginea...)"
-    else:
-        note = ""
 
     with st.chat_message("assistant"):
-        with st.spinner(f"Calculez soluția...{note}"):
+        with st.spinner("Rezolv..."):
             try:
-                # Apelăm direct API-ul Google
                 response = model.generate_content(inputs)
-                
-                # Extragem textul
-                response_text = response.text
-                
-                st.write(response_text)
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                st.write(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                st.error(f"Eroare la generare: {e}")
+                st.error(f"Eroare: {e}")
+                st.info("Sfat: Încearcă să selectezi alt model din meniul din stânga.")
