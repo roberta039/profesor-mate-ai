@@ -4,7 +4,7 @@ from PIL import Image
 
 # 1. Configurare Pagină
 st.set_page_config(page_title="Profesor universal (Matematică, Fizică, Chimie, Info)", page_icon="🎓")
-st.title("🎓 Proful de Mate - Selector Modele")
+st.title("🎓 Profesor universal (Matematică, Fizică, Chimie, Info)")
 
 # 2. Configurare API Key
 if "GOOGLE_API_KEY" in st.secrets:
