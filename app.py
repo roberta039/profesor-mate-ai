@@ -3,8 +3,8 @@ import google.generativeai as genai
 from PIL import Image
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesor universal (Matematică, Fizică, Chimie, Info)", page_icon="🎓")
-st.title("🎓 Profesor universal (Matematică, Fizică, Chimie, Info)")
+st.set_page_config(page_title="Profesor Universal (Auto)", page_icon="🧠")
+st.title("🧠 Profesor Universal (Auto-Pilot)")
 
 # 2. Configurare API Key
 if "GOOGLE_API_KEY" in st.secrets:
@@ -23,29 +23,43 @@ except Exception as e:
     st.error(f"Eroare la configurare cheie: {e}")
     st.stop()
 
-# --- ZONA DE DEBUGGING (Găsirea modelelor) ---
-st.sidebar.header("⚙️ Setări Model")
-
-@st.cache_data # Salvăm lista ca să nu o cerem la fiecare click
-def get_available_models():
+# --- LOGICA DE SELECȚIE AUTOMATĂ A CELUI MAI BUN MODEL ---
+def get_best_model_automatically():
     try:
-        model_list = []
+        all_models = []
         for m in genai.list_models():
-            # Căutăm modele care suportă generare de conținut
+            # Păstrăm doar modelele care știu să genereze text/chat
             if 'generateContent' in m.supported_generation_methods:
-                model_list.append(m.name)
-        return model_list
+                # Filtrăm doar modelele stabile gemini (evităm modelele 'embedding' sau 'aqa')
+                if "gemini" in m.name:
+                    all_models.append(m.name)
+        
+        # Le sortăm invers alfabetic (Z->A)
+        # Astfel, "gemini-1.5" va fi deasupra lui "gemini-1.0"
+        # Și "gemini-2.0" va fi deasupra lui "gemini-1.5"
+        # De asemenea, "Pro" (P) câștigă în fața lui "Flash" (F) la sortare inversă
+        all_models.sort(reverse=True)
+        
+        if all_models:
+            return all_models[0] # Returnăm campionul
+        else:
+            return "models/gemini-1.5-flash" # Fallback de siguranță
+            
     except Exception as e:
-        st.sidebar.error(f"Nu pot lista modelele: {e}")
-        return ["models/gemini-1.5-flash"] # Fallback
+        return "models/gemini-1.5-flash" # Fallback în caz de eroare
 
-available_models = get_available_models()
-selected_model_name = st.sidebar.selectbox("Alege Modelul:", available_models, index=0)
+# Aflăm modelul suprem
+best_model_name = get_best_model_automatically()
 
-# Inițializăm modelul cu noua personalitate de "Profesor Răbdător"
+# Îl afișăm discret în stânga, ca să știi cine lucrează
+st.sidebar.header("🤖 Status")
+st.sidebar.success(f"Model activat automat:\n**{best_model_name}**")
+st.sidebar.caption("Sistemul a selectat automat cea mai nouă și performantă versiune disponibilă la Google.")
+
+# --- INITIALIZARE MODEL ---
 try:
         model = genai.GenerativeModel(
-        selected_model_name,
+        best_model_name,
         system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie) răbdător și empatic.
         
         REGULĂ STRICTĂ: Predă exact ca la școală (nivel Gimnaziu/Liceu). 
@@ -66,7 +80,7 @@ try:
         """
     )
 except Exception as e:
-    st.error(f"Eroare la inițializarea modelului {selected_model_name}: {e}")
+    st.error(f"Eroare la inițializarea modelului {best_model_name}: {e}")
 
 # 3. Interfața de Upload
 st.sidebar.header("📁 Materiale")
@@ -79,7 +93,7 @@ if uploaded_file:
 
 # 4. Chat History
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": f"Salut! Folosesc {selected_model_name}. Cu ce te ajut?"}]
+    st.session_state["messages"] = [{"role": "assistant", "content": f"Salut! Sunt conectat la cel mai inteligent creier disponibil ({best_model_name}). Cu ce te ajut?"}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
@@ -101,4 +115,3 @@ if user_input := st.chat_input("Scrie problema..."):
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"Eroare: {e}")
-                st.info("Sfat: Încearcă să selectezi alt model din meniul din stânga.")
