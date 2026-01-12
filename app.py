@@ -3,7 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesor Universal (Filtered)", page_icon="🎓")
+st.set_page_config(page_title="Profesor Universal (2.5 Flash)", page_icon="🎓")
 st.title("🎓 Profesor Universal")
 
 # 2. Configurare API Key
@@ -22,42 +22,49 @@ except Exception as e:
     st.error(f"Eroare la configurare cheie: {e}")
     st.stop()
 
-# --- ZONA DE LISTARE INTELIGENTĂ CU FILTRE ---
+# --- ZONA DE LISTARE MODEL ---
 st.sidebar.header("⚙️ Alege Modelul")
 
 @st.cache_data
 def get_available_models():
-    # 1. Lista modelelor sigure care știm că VĂD poze
-    priority_list = ["models/gemini-2.0-flash-exp", "models/gemini-1.5-flash", "models/gemini-1.5-pro"]
+    # AICI AM MODIFICAT:
+    # Am pus "gemini-2.5-flash" primul. Acesta va fi Default.
+    priority_list = [
+        "models/gemini-2.5-flash", 
+        "models/gemini-2.0-flash-exp", 
+        "models/gemini-1.5-flash", 
+        "models/gemini-1.5-pro"
+    ]
+    
     found_list = []
     
-    # Cuvinte interzise (modele care nu ne trebuie la Mate)
+    # Lista neagră pentru modele care nu merg (TTS, Audio, etc)
     blacklist = ["tts", "audio", "embedding", "aqa", "speaker", "vision-only"]
     
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 name = m.name.lower()
-                # Verificăm să fie Gemini
                 if "gemini" in name:
-                    # Verificăm să NU fie în lista neagră
+                    # Aplicăm filtrul ca să nu apară erori
                     if not any(bad_word in name for bad_word in blacklist):
                         found_list.append(m.name)
     except:
         pass
     
     found_list.sort(reverse=True)
-    # Eliminăm duplicatele și punem prioritarele primele
+    
+    # Combinăm listele. Deoarece priority_list e prima, elementul 0 (2.5 flash) va fi primul.
     final_list = list(dict.fromkeys(priority_list + found_list))
     
     return final_list
 
 available_models = get_available_models()
 
-# Selectorul Manual
+# Selectbox ia automat index=0, adică primul din listă (2.5 Flash)
 selected_model_name = st.sidebar.selectbox("Model:", available_models, index=0)
 
-# Verificăm schimbarea modelului pentru refresh
+# Verificăm schimbarea modelului pentru refresh la chat
 if "last_model" not in st.session_state:
     st.session_state["last_model"] = selected_model_name
 
@@ -76,18 +83,9 @@ try:
         NU confunda elevul cu detalii despre "aproximări" sau "lumea reală" decât dacă problema o cere specific.
 
         Ghid de comportament:
-        1. MATEMATICĂ: Lucrează cu valori exacte sau standard. 
-           - Dacă rezultatul e $\sqrt{2}$, lasă-l $\sqrt{2}$. Nu spune "care este aproximativ 1.41".
-           - Nu menționa că $\pi$ e infinit; folosește valorile din manual fără comentarii suplimentare.
-           - Dacă rezultatul e rad(2), lasă-l rad(2). Nu îl calcula aproximativ.
-        2. FIZICĂ/CHIMIE: Presupune automat "condiții ideale".
-           - Nu menționa frecarea cu aerul, pierderile de căldură sau imperfecțiunile aparatelor de măsură.
-           - Tratează problema exact așa cum apare în culegere, într-un univers matematic perfect.
-        3. Stilul de predare: Explică simplu, cald și prietenos. Evită limbajul academic rigid ("limbajul de lemn").
-        4. Analogii: Folosește comparații din viața reală pentru a explica concepte abstracte (ex: "Voltajul e ca presiunea apei pe o țeavă").
-        5. Teorie: Când ești întrebat de teorie, definește conceptul, apoi dă un exemplu concret, apoi explică la ce ne ajută în viața reală.
-        6. Rezolvare probleme: Nu da doar rezultatul. Explică pașii logici ("Facem asta pentru că...").
-        7. Formule: Folosește LaTeX ($...$) pentru claritate, dar explică ce înseamnă fiecare literă din formulă.
+        1. MATEMATICĂ: Lucrează cu valori exacte. (ex: sqrt(2) rămâne sqrt(2)).
+        2. FIZICĂ/CHIMIE: Condiții ideale (fără frecare).
+        3. EXPLICATII: Pas cu pas, simplu, cu LaTeX ($...$) pentru formule.
         """
     )
 except Exception as e:
@@ -125,11 +123,10 @@ if user_input := st.chat_input("Scrie problema..."):
                 st.write(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                # Tratarea erorilor specifice
                 err_msg = str(e).lower()
                 st.error(f"Eroare: {e}")
                 
                 if "image input modality is not enabled" in err_msg:
-                    st.warning("⚠️ Modelul selectat este 'ORB' (nu suportă imagini). Te rog selectează un model 'Flash' sau 'Pro' din listă.")
+                    st.warning("⚠️ Modelul selectat nu suportă imagini. Alege altul.")
                 elif "quota" in err_msg or "429" in err_msg:
-                    st.warning("⚠️ Limita gratuită atinsă pentru acest model. Schimbă pe 'gemini-1.5-flash'.")
+                    st.warning("⚠️ Limita atinsă. Încearcă 'gemini-1.5-flash'.")
