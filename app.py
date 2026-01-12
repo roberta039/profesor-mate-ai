@@ -23,38 +23,38 @@ except Exception as e:
     st.error(f"Eroare la configurare cheie: {e}")
     st.stop()
 
-# --- LOGICA DE SELECȚIE AUTOMATĂ A CELUI MAI BUN MODEL ---
+# --- LOGICA DE SELECȚIE AUTOMATĂ (Actualizare la Gemini 3, 4 etc.) ---
 def get_best_model_automatically():
     try:
         all_models = []
         for m in genai.list_models():
             # Păstrăm doar modelele care știu să genereze text/chat
             if 'generateContent' in m.supported_generation_methods:
-                # Filtrăm doar modelele stabile gemini (evităm modelele 'embedding' sau 'aqa')
                 if "gemini" in m.name:
                     all_models.append(m.name)
         
-        # Le sortăm invers alfabetic (Z->A)
-        # Astfel, "gemini-1.5" va fi deasupra lui "gemini-1.0"
-        # Și "gemini-2.0" va fi deasupra lui "gemini-1.5"
-        # De asemenea, "Pro" (P) câștigă în fața lui "Flash" (F) la sortare inversă
+        # Le sortăm invers (Z->A și 9->0)
+        # Efectul: 
+        # 1. Gemini 3.0 va fi deasupra lui Gemini 2.0
+        # 2. Gemini 1.5-Pro va fi deasupra lui Gemini 1.5-Flash (P e după F)
         all_models.sort(reverse=True)
         
         if all_models:
-            return all_models[0] # Returnăm campionul
+            return all_models[0] # Returnăm Campionul (ex: gemini-3.0-pro când apare)
         else:
-            return "models/gemini-1.5-flash" # Fallback de siguranță
+            return "models/gemini-1.5-flash" # Fallback
             
     except Exception as e:
-        return "models/gemini-1.5-flash" # Fallback în caz de eroare
+        return "models/gemini-1.5-flash"
 
 # Aflăm modelul suprem
 best_model_name = get_best_model_automatically()
 
-# Îl afișăm discret în stânga, ca să știi cine lucrează
+# Îl afișăm în stânga
 st.sidebar.header("🤖 Status")
-st.sidebar.success(f"Model activat automat:\n**{best_model_name}**")
-st.sidebar.caption("Sistemul a selectat automat cea mai nouă și performantă versiune disponibilă la Google.")
+st.sidebar.success(f"Model activat:\n**{best_model_name}**")
+if "gemini-3" in best_model_name:
+    st.sidebar.balloons() # Va sărbători cu baloane când apare Gemini 3!
 
 # --- INITIALIZARE MODEL ---
 try:
@@ -93,7 +93,7 @@ if uploaded_file:
 
 # 4. Chat History
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": f"Salut! Sunt conectat la cel mai inteligent creier disponibil ({best_model_name}). Cu ce te ajut?"}]
+    st.session_state["messages"] = [{"role": "assistant", "content": f"Salut! Sunt conectat la {best_model_name}. Cu ce te ajut?"}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
