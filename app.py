@@ -23,24 +23,30 @@ except Exception as e:
     st.error(f"Eroare la configurare cheie: {e}")
     st.stop()
 
-# --- LOGICA DE SELECȚIE AUTOMATĂ (Actualizare la Gemini 3, 4 etc.) ---
+# --- LOGICA DE SELECȚIE AUTOMATĂ (FILTRATĂ) ---
 def get_best_model_automatically():
     try:
         all_models = []
         for m in genai.list_models():
-            # Păstrăm doar modelele care știu să genereze text/chat
+            # Verificăm doar modelele care generează conținut
             if 'generateContent' in m.supported_generation_methods:
-                if "gemini" in m.name:
-                    all_models.append(m.name)
+                name = m.name
+                if "gemini" in name:
+                    # --- FILTRU DE SIGURANȚĂ ---
+                    # Excludem modelele experimentale ciudate care strică sortarea
+                    if "robotics" in name: continue  # Nu vrem robotică
+                    if "aqa" in name: continue       # Nu vrem modele de test AQA
+                    if "embedding" in name: continue # Nu vrem embeddings
+                    
+                    all_models.append(name)
         
-        # Le sortăm invers (Z->A și 9->0)
-        # Efectul: 
-        # 1. Gemini 3.0 va fi deasupra lui Gemini 2.0
-        # 2. Gemini 1.5-Pro va fi deasupra lui Gemini 1.5-Flash (P e după F)
+        # Sortăm invers (Z->A și 9->0)
+        # Acum că am scos "Robotics", "Pro" (P) va câștiga în fața lui "Flash" (F).
+        # Și Gemini 3 va câștiga în fața lui Gemini 2 sau 1.5.
         all_models.sort(reverse=True)
         
         if all_models:
-            return all_models[0] # Returnăm Campionul (ex: gemini-3.0-pro când apare)
+            return all_models[0] # Returnăm Campionul real
         else:
             return "models/gemini-1.5-flash" # Fallback
             
@@ -53,8 +59,10 @@ best_model_name = get_best_model_automatically()
 # Îl afișăm în stânga
 st.sidebar.header("🤖 Status")
 st.sidebar.success(f"Model activat:\n**{best_model_name}**")
+
+# Dacă apare Gemini 3 în viitor, sărbătorim!
 if "gemini-3" in best_model_name:
-    st.sidebar.balloons() # Va sărbători cu baloane când apare Gemini 3!
+    st.sidebar.balloons() 
 
 # --- INITIALIZARE MODEL ---
 try:
