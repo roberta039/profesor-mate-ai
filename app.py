@@ -3,8 +3,8 @@ import google.generativeai as genai
 from PIL import Image
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesorul tau Universal (2.5 Flash)", page_icon="⚡")
-st.title("⚡ Profesorul tau Universal")
+st.set_page_config(page_title="Profesor Universal (2.5 Flash)", page_icon="⚡")
+st.title("⚡ Profesor Universal")
 st.caption("Powered by Gemini 2.5 Flash")
 
 # 2. Configurare API Key
@@ -65,7 +65,7 @@ if uploaded_file:
 
 # 4. Chat History
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "Salut! Sunt gata de treabă. Ce problemă rezolvăm azi?"}]
+    st.session_state["messages"] = [{"role": "assistant", "content": "Salut! Cu ce te ajut?"}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
