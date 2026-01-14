@@ -6,8 +6,8 @@ from gtts import gTTS
 from io import BytesIO # <--- NOU: Pentru audio în memorie
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesor Universal (Audio)", page_icon="⚡")
-st.title("⚡ Profesor Universal")
+st.set_page_config(page_title="Profesor Liceu", page_icon="⚡")
+st.title("⚡ Profesor Liceu")
 
 # 2. Configurare API Key
 if "GOOGLE_API_KEY" in st.secrets:
