@@ -1,11 +1,12 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import tempfile # Avem nevoie de asta pentru a manipula PDF-urile temporar
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesor Universal (Contextual)", page_icon="🧠")
-st.title("🧠 Profesor Universal")
-st.caption("Powered by Gemini 2.5 Flash | Memorie Text + Focus Vizual")
+st.set_page_config(page_title="Profesor Universal (PDF & Vision)", page_icon="📚")
+st.title("📚 Profesor Universal")
+st.caption("Powered by Gemini 2.5 Flash | Analiză Cărți (PDF) & Probleme (Foto)")
 
 # 2. Configurare API Key
 if "GOOGLE_API_KEY" in st.secrets:
@@ -29,85 +30,100 @@ FIXED_MODEL_ID = "models/gemini-2.5-flash"
 try:
     model = genai.GenerativeModel(
         FIXED_MODEL_ID,
-        system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie) răbdător și empatic.
+        system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie, Literatură).
         
-        REGULĂ STRICTĂ: Predă exact ca la școală (nivel Gimnaziu/Liceu). 
-        NU confunda elevul cu detalii despre "aproximări" sau "lumea reală" decât dacă problema o cere specific.
-
-        Ghid de comportament:
-        1. MATEMATICĂ: Lucrează cu valori exacte sau standard. 
-           - Dacă rezultatul e $\sqrt{2}$, lasă-l $\sqrt{2}$. Nu spune "care este aproximativ 1.41".
-           - Nu menționa că $\pi$ e infinit; folosește valorile din manual fără comentarii suplimentare.
-           - Dacă rezultatul e rad(2), lasă-l rad(2). Nu îl calcula aproximativ.
-        2. FIZICĂ/CHIMIE: Presupune automat "condiții ideale".
-           - Nu menționa frecarea cu aerul, pierderile de căldură sau imperfecțiunile aparatelor de măsură.
-           - Tratează problema exact așa cum apare în culegere, într-un univers matematic perfect.
-        3. Stilul de predare: Explică simplu, cald și prietenos. Evită limbajul academic rigid ("limbajul de lemn").
-        4. Analogii: Folosește comparații din viața reală pentru a explica concepte abstracte (ex: "Voltajul e ca presiunea apei pe o țeavă").
-        5. Teorie: Când ești întrebat de teorie, definește conceptul, apoi dă un exemplu concret, apoi explică la ce ne ajută în viața reală.
-        6. Rezolvare probleme: Nu da doar rezultatul. Explică pașii logici ("Facem asta pentru că...").
-        7. Formule: Folosește LaTeX ($...$) pentru claritate, dar explică ce înseamnă fiecare literă din formulă.
+        SARCINI:
+        1. ȘTIINȚE EXACTE (Mate/Fizică): Predă exact ca la școală. Valori exacte, fără aproximări, condiții ideale.
+        2. LITERATURĂ/LECTURĂ: Dacă primești un PDF (carte/eseu), fă rezumate structurate, analize de personaje sau extrage ideile principale. Fii un critic literar și un pedagog excelent.
+        
+        STIL: Răbdător, empatic, clar. Folosește limba română.
         """
     )
 except Exception as e:
     st.error(f"Eroare critică: {e}")
     st.stop()
 
-# 3. Interfața de Upload
+# 3. Interfața de Upload (Modificată pentru PDF)
 st.sidebar.header("📁 Materiale")
-uploaded_file = st.sidebar.file_uploader("Încarcă o poză (Doar pentru întrebarea curentă)", type=["jpg", "jpeg", "png"])
+# Acum acceptăm și PDF
+uploaded_file = st.sidebar.file_uploader("Încarcă Poză sau PDF", type=["jpg", "jpeg", "png", "pdf"])
 
-img = None
+media_content = None # Aici vom stoca fișierul procesat (Poză sau PDF)
+file_type = ""
+
 if uploaded_file:
-    img = Image.open(uploaded_file)
-    st.sidebar.image(img, caption="Imagine de analizat", use_container_width=True)
+    file_type = uploaded_file.type
+    
+    if "image" in file_type:
+        # Procesare Imagine
+        media_content = Image.open(uploaded_file)
+        st.sidebar.image(media_content, caption="Imagine încărcată", use_container_width=True)
+        
+    elif "pdf" in file_type:
+        # Procesare PDF (Mai complex)
+        st.sidebar.info("📄 PDF Detectat. Se procesează...")
+        
+        # 1. Salvăm PDF-ul într-un fișier temporar pe disc
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+        
+        # 2. Încărcăm fișierul pe serverele Google (File API)
+        try:
+            with st.spinner("Urc cartea în biblioteca digitală Google..."):
+                uploaded_pdf = genai.upload_file(tmp_path, mime_type="application/pdf")
+                media_content = uploaded_pdf # Acesta este obiectul pe care îl trimitem la AI
+                st.sidebar.success(f"✅ Carte încărcată! ({uploaded_file.name})")
+        except Exception as e:
+            st.sidebar.error(f"Eroare la upload PDF: {e}")
 
-# 4. Chat History (UI)
+# 4. Chat History
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-# Afișăm conversația pe ecran
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-# 5. Input și Logica de Construire a Istoricului
-if user_input := st.chat_input("Scrie problema..."):
-    # A. Afișăm mesajul utilizatorului în UI
+# 5. Input și Logică
+if user_input := st.chat_input("Scrie cerința (ex: 'Fă rezumatul cărții')..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    # B. CONSTRUIM ISTORICUL PENTRU MODEL (The Smart Part)
-    # Vom crea o listă 'contents' pe care o trimitem la Google.
+    # --- CONSTRUIREA MESAJULUI ---
     conversation_payload = []
 
-    # 1. Adăugăm mesajele VECHI (Doar text, pentru context)
-    # Ignorăm ultimul mesaj adăugat acum, pentru că îl procesăm special cu poza
+    # A. Istoric text (context)
     for msg in st.session_state.messages[:-1]:
-        # Convertim rolurile: "assistant" -> "model", "user" -> "user"
         role = "model" if msg["role"] == "assistant" else "user"
         conversation_payload.append({
             "role": role,
             "parts": [msg["content"]]
         })
 
-    # 2. Adăugăm mesajul CURENT (Text + Imagine dacă există)
+    # B. Mesajul curent + Fișierul (dacă există)
     current_parts = [user_input]
-    if img:
-        current_parts.append(img) # Aici atașăm imaginea DOAR acum
     
+    if media_content:
+        # Verificăm dacă e Poză sau PDF (Google File)
+        current_parts.append(media_content)
+        
+        if "pdf" in file_type:
+            display_note = " (Analizez PDF-ul...)"
+        else:
+            display_note = " (Analizez imaginea...)"
+    else:
+        display_note = ""
+
     conversation_payload.append({
         "role": "user",
         "parts": current_parts
     })
 
-    # C. Trimitem tot pachetul la Model
+    # C. Trimitere
     with st.chat_message("assistant"):
-        with st.spinner("Gândesc..."):
+        with st.spinner(f"Profesorul lucrează...{display_note}"):
             try:
-                # generate_content acceptă o listă de mesaje pentru chat history
                 response = model.generate_content(conversation_payload)
-                
-                # Afișăm și salvăm răspunsul
                 st.write(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
