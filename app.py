@@ -2,11 +2,12 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import tempfile
+from gtts import gTTS
+from io import BytesIO # <--- NOU: Pentru audio în memorie
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesor Universal (Multi-File)", page_icon="📚")
-st.title("📚 Profesor Universal")
-st.caption("Powered by Gemini 2.5 Flash | Suportă Mai Multe Volume")
+st.set_page_config(page_title="Profesor Universal (Audio)", page_icon="🗣️")
+st.title("🗣️ Profesor Universal")
 
 # 2. Configurare API Key
 if "GOOGLE_API_KEY" in st.secrets:
@@ -15,7 +16,6 @@ else:
     api_key = st.sidebar.text_input("Introdu Google API Key:", type="password")
 
 if not api_key:
-    st.info("Introdu cheia Google API.")
     st.stop()
 
 genai.configure(api_key=api_key)
@@ -24,7 +24,7 @@ FIXED_MODEL_ID = "models/gemini-2.5-flash"
 try:
     model = genai.GenerativeModel(
         FIXED_MODEL_ID,
-                system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie, Literatură) răbdător și empatic.
+               system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie, Literatură) răbdător și empatic.
         
         REGULĂ STRICTĂ: Predă exact ca la școală (nivel Gimnaziu/Liceu). 
         NU confunda elevul cu detalii despre "aproximări" sau "lumea reală" decât dacă problema o cere specific.
@@ -51,44 +51,28 @@ try:
         """
     )
 except Exception as e:
-    st.error(f"Eroare: {e}")
+    st.error(f"Eroare model: {e}")
     st.stop()
 
-# 3. Interfața de Upload (ACUM MULTIPLU)
+# 3. Upload Multiplu
 st.sidebar.header("📁 Materiale")
-
-# --- MODIFICARE AICI: accept_multiple_files=True ---
-uploaded_files = st.sidebar.file_uploader(
-    "Încarcă Volumele (Selectează ambele fișiere)", 
-    type=["jpg", "png", "pdf"], 
-    accept_multiple_files=True 
-)
-
-processed_files_list = [] # Aici ținem minte toate fișierele (Vol 1, Vol 2 etc.)
+uploaded_files = st.sidebar.file_uploader("Încarcă fișiere", type=["jpg", "png", "pdf"], accept_multiple_files=True)
+processed_files = []
 
 if uploaded_files:
     for up_file in uploaded_files:
-        file_type = up_file.type
-        
-        if "image" in file_type:
-            # E poză
-            img = Image.open(up_file)
-            st.sidebar.image(img, caption=up_file.name, use_container_width=True)
-            processed_files_list.append(img)
-            
-        elif "pdf" in file_type:
-            # E PDF
+        if "image" in up_file.type:
+            processed_files.append(Image.open(up_file))
+            st.sidebar.image(up_file, caption=up_file.name)
+        elif "pdf" in up_file.type:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(up_file.getvalue())
-                tmp_path = tmp.name
-            
+                path = tmp.name
             try:
-                # Încărcăm fiecare volum la Google
-                google_file = genai.upload_file(tmp_path, mime_type="application/pdf")
-                processed_files_list.append(google_file)
-                st.sidebar.success(f"✅ {up_file.name} încărcat!")
-            except Exception as e:
-                st.sidebar.error(f"Eroare la {up_file.name}: {e}")
+                processed_files.append(genai.upload_file(path, mime_type="application/pdf"))
+                st.sidebar.success(f"✅ {up_file.name}")
+            except:
+                st.sidebar.error("Eroare upload PDF")
 
 # 4. Chat History
 if "messages" not in st.session_state:
@@ -97,36 +81,46 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-# 5. Input
-if user_input := st.chat_input("Scrie cerința..."):
+# 5. Input și Generare
+if user_input := st.chat_input("Scrie ceva..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
-    # Construim mesajul
     payload = []
-    
-    # Istoric text
     for msg in st.session_state.messages[:-1]:
         role = "model" if msg["role"] == "assistant" else "user"
         payload.append({"role": role, "parts": [msg["content"]]})
     
-    # Mesaj curent
     current_parts = [user_input]
-    
-    # Adăugăm TOATE fișierele încărcate (Vol 1 + Vol 2)
-    if processed_files_list:
-        current_parts.extend(processed_files_list)
-        note = f" (Analizez {len(processed_files_list)} fișiere...)"
-    else:
-        note = ""
-
+    if processed_files:
+        current_parts.extend(processed_files)
     payload.append({"role": "user", "parts": current_parts})
 
     with st.chat_message("assistant"):
-        with st.spinner(f"Profesorul lucrează...{note}"):
+        with st.spinner("Scriu și pregătesc vocea..."):
             try:
+                # Generare Text
                 response = model.generate_content(payload)
-                st.write(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                text = response.text
+                st.write(text)
+                st.session_state.messages.append({"role": "assistant", "content": text})
+
+                # Generare Audio (Metoda Sigură cu BytesIO)
+                if len(text) > 0:
+                    try:
+                        # Curățăm textul de simboluri care sună urât
+                        clean_text = text.replace("*", "").replace("#", "").replace("$", "")
+                        
+                        # Creăm fișierul în memorie
+                        sound_file = BytesIO()
+                        tts = gTTS(text=clean_text, lang='ro')
+                        tts.write_to_fp(sound_file)
+                        
+                        # Afișăm playerul
+                        st.audio(sound_file, format='audio/mp3')
+                        
+                    except Exception as e_audio:
+                        st.warning(f"Nu am putut genera vocea: {e_audio}")
+            
             except Exception as e:
                 st.error(f"Eroare: {e}")
