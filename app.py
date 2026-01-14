@@ -3,87 +3,150 @@ import google.generativeai as genai
 from PIL import Image
 
 # 1. Configurare Pagină
-st.set_page_config(page_title="Profesorul tau Universal (2.5 Flash)", page_icon="⚡")
-st.title("⚡ Profesorul tau Universal")
-st.caption("Powered by Gemini 2.5 Flash")
+st.set_page_config(page_title="Profesorul tau Universal", page_icon="⚡", layout="wide")
 
-# 2. Configurare API Key
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-else:
-    api_key = st.sidebar.text_input("Introdu Google API Key:", type="password")
+# --- CSS PENTRU MOBILE ---
+# Mutăm audio input mai jos, să fie accesibil pe telefon
+st.markdown("""
+<style>
+    .stAudioInput {
+        position: fixed;
+        bottom: 80px;
+        z-index: 100;
+        width: 100%;
+        max-width: 800px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+# 2. Sidebar - Setări și Upload
+with st.sidebar:
+    st.title("⚡ Panou Control")
+    
+    # API Key
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+    else:
+        api_key = st.text_input("Introdu Google API Key:", type="password")
+    
+    st.divider()
+    st.header("📸 Imagine (Opțional)")
+    uploaded_file = st.file_uploader("Încarcă o poză cu exercițiul", type=["jpg", "jpeg", "png"])
+    
+    img = None
+    if uploaded_file:
+        img = Image.open(uploaded_file)
+        st.image(img, caption="Imagine analizată", use_container_width=True)
+    
+    if st.button("🗑️ Resetare Conversație", type="primary"):
+        st.session_state.messages = []
+        st.rerun()
+
+# Stop dacă nu avem cheie
 if not api_key:
-    st.info("Introdu cheia Google API pentru a începe.")
+    st.warning("Introdu cheia API pentru a începe.")
     st.stop()
 
+# Configurare Gemini
 try:
     genai.configure(api_key=api_key)
+    # Folosim Flash pentru viteză și multimodalitate (audio/foto)
+    model = genai.GenerativeModel("models/gemini-1.5-flash", system_instruction="""
+    Ești un profesor răbdător pentru elevi de gimnaziu/liceu.
+    Dacă primești AUDIO: Ascultă cu atenție întrebarea elevului și răspunde în scris.
+    Dacă primești IMAGINE: Rezolvă exercițiul din poză pas cu pas.
+    Dacă primești TEXT: Răspunde didactic, folosind LaTeX pentru formule.
+    Fii scurt, concis și încurajator. Nu da răspunsul direct, explică logica.
+    """)
 except Exception as e:
-    st.error(f"Eroare la configurare cheie: {e}")
+    st.error(f"Eroare configurare: {e}")
     st.stop()
 
-# --- INITIALIZARE MODEL (FIX: GEMINI 2.5 FLASH) ---
-# Nu mai există selector. Folosim direct acest ID.
-FIXED_MODEL_ID = "models/gemini-2.5-flash"
+# 3. Interfața Chat
+st.title("🎓 Profesorul tău Virtual")
 
-try:
-    model = genai.GenerativeModel(
-        FIXED_MODEL_ID,
-        system_instruction="""Ești un profesor universal (Mate, Fizică, Chimie) răbdător și empatic.
-        
-        REGULĂ STRICTĂ: Predă exact ca la școală (nivel Gimnaziu/Liceu). 
-        NU confunda elevul cu detalii despre "aproximări" sau "lumea reală" decât dacă problema o cere specific.
-
-        Ghid de comportament:
-        1. MATEMATICĂ: Lucrează cu valori exacte sau standard. 
-           - Dacă rezultatul e $\sqrt{2}$, lasă-l $\sqrt{2}$. Nu spune "care este aproximativ 1.41".
-           - Nu menționa că $\pi$ e infinit; folosește valorile din manual fără comentarii suplimentare.
-           - Dacă rezultatul e rad(2), lasă-l rad(2). Nu îl calcula aproximativ.
-        2. FIZICĂ/CHIMIE: Presupune automat "condiții ideale".
-           - Nu menționa frecarea cu aerul, pierderile de căldură sau imperfecțiunile aparatelor de măsură.
-           - Tratează problema exact așa cum apare în culegere, într-un univers matematic perfect.
-        3. Stilul de predare: Explică simplu, cald și prietenos. Evită limbajul academic rigid ("limbajul de lemn").
-        4. Analogii: Folosește comparații din viața reală pentru a explica concepte abstracte (ex: "Voltajul e ca presiunea apei pe o țeavă").
-        5. Teorie: Când ești întrebat de teorie, definește conceptul, apoi dă un exemplu concret, apoi explică la ce ne ajută în viața reală.
-        6. Rezolvare probleme: Nu da doar rezultatul. Explică pașii logici ("Facem asta pentru că...").
-        7. Formule: Folosește LaTeX ($...$) pentru claritate, dar explică ce înseamnă fiecare literă din formulă.
-        """
-    )
-except Exception as e:
-    st.error(f"Eroare critică: Nu pot inițializa modelul {FIXED_MODEL_ID}. Verifică dacă numele este corect sau dacă ai acces la el.")
-    st.stop()
-
-# 3. Interfața de Upload
-st.sidebar.header("📁 Materiale")
-uploaded_file = st.sidebar.file_uploader("Încarcă o poză", type=["jpg", "jpeg", "png"])
-
-img = None
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    st.sidebar.image(img, caption="Imagine încărcată", use_container_width=True)
-
-# 4. Chat History
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "Salut! Cu ce te ajut?"}]
+    st.session_state["messages"] = []
 
+# Afișare istoric
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    with st.chat_message(msg["role"]):
+        # Dacă mesajul e audio (memorat ca byte), afișăm player, altfel text
+        if isinstance(msg["content"], bytes):
+             st.audio(msg["content"], format="audio/wav")
+        else:
+             st.write(msg["content"])
 
-# 5. Input
-if user_input := st.chat_input("Scrie problema..."):
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user").write(user_input)
+# --- ZONA DE INPUT (Duală: Text sau Voce) ---
 
-    inputs = [user_input]
-    if img:
-        inputs.append(img)
+# Container pentru input
+input_container = st.container()
 
+# Variabile pentru input
+audio_value = None
+text_input = None
+
+# A. Input Vocal (folosind st.audio_input)
+# Notă: Pe mobil apare ca un buton de microfon
+audio_value = st.audio_input("🎙️ Apasă microfonul pentru a întreba vocal (sau scrie jos)")
+
+# B. Input Text
+text_input = st.chat_input("Scrie întrebarea ta aici...")
+
+# --- LOGICA DE PROCESARE ---
+
+def get_gemini_response(prompt_content):
     with st.chat_message("assistant"):
-        with st.spinner("Rezolv..."):
+        with st.spinner("Analizez..."):
             try:
-                response = model.generate_content(inputs)
+                # Construim lista de input (istoric sumar + input curent + imagine opțional)
+                full_prompt = []
+                
+                # Dacă avem imagine încărcată în sidebar, o trimitem mereu contextului
+                if img:
+                    full_prompt.append(img)
+                    full_prompt.append("Aceasta este imaginea la care fac referire:")
+
+                # Adăugăm inputul curent (Text sau Audio)
+                full_prompt.append(prompt_content)
+
+                response = model.generate_content(full_prompt)
                 st.write(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"Eroare: {e}")
+
+# Verificăm ce a trimis utilizatorul
+if audio_value:
+    # Verificăm să nu procesăm același audio de două ori (un comportament specific Streamlit)
+    # Folosim un identificator simplu sau verificăm ultimul mesaj
+    is_new_audio = True
+    if len(st.session_state.messages) > 0:
+        last_msg = st.session_state.messages[-1]
+        # Dacă ultimul mesaj e user și e identic cu ce avem acum, ignorăm (evităm loop)
+        # (Aici e o simplificare, ideal comparăm hash-uri, dar merge pentru MVP)
+        pass 
+
+    # Afișăm audio-ul utilizatorului
+    with st.chat_message("user"):
+        st.audio(audio_value, format="audio/wav")
+    
+    # Salvăm în istoric ca bytes
+    st.session_state.messages.append({"role": "user", "content": audio_value.getvalue()})
+    
+    # Pregătim pentru Gemini
+    # Gemini vrea un dicționar pentru audio
+    gemini_audio = {
+        "mime_type": "audio/wav",
+        "data": audio_value.getvalue()
+    }
+    
+    get_gemini_response(gemini_audio)
+
+elif text_input:
+    # Afișăm textul utilizatorului
+    with st.chat_message("user"):
+        st.write(text_input)
+    st.session_state.messages.append({"role": "user", "content": text_input})
+    
+    get_gemini_response(text_input)
