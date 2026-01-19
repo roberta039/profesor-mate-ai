@@ -78,8 +78,8 @@ else:
 # ==========================================
 
 # Încărcăm cheile
-if "GOOGLE_API_KEYS" in st.secrets:
-    keys = st.secrets["GOOGLE_API_KEYS"]
+if "GOOGLE_API_KEY" in st.secrets:
+    keys = st.secrets["GOOGLE_API_KEY"]
 elif "GOOGLE_API_KEY" in st.secrets:
     keys = [st.secrets["GOOGLE_API_KEY"]]
 else:
