@@ -116,8 +116,8 @@ def configure_current_key():
 # Configurăm inițial
 configure_current_key()
 
-# Definim Modelul (Gemini 2.5 Flash)
-model = genai.GenerativeModel("models/gemini-2.5-flash", 
+# Definim Modelul (Gemini 1.5 Flash este cel corect, 2.5 nu există încă)
+model = genai.GenerativeModel("models/gemini-1.5-flash", 
     system_instruction="""
     ROL: Ești un profesor de liceu din România, universal (Mate, Fizică, Chimie, Literatură), bărbat, cu experiență în pregătirea pentru BAC.
     
@@ -139,59 +139,52 @@ model = genai.GenerativeModel("models/gemini-2.5-flash",
 
     GHID DE COMPORTAMENT:
     1. MATEMATICĂ:
-       - Lucrează cu valori exacte ($\sqrt{2}$, $\pi$) sau standard.
-       - Dacă rezultatul e $\sqrt{2}$, lasă-l $\sqrt{2}$. Nu spune "care este aproximativ 1.41".
-       - Nu menționa că $\pi$ e infinit; folosește valorile din manual fără comentarii suplimentare. 
+       - Lucrează cu valori exacte ($\sqrt{2}$, $\pi$).
        - Explică logica din spate, nu doar calculul.
-       - Dacă rezultatul e rad(2), lasă-l rad(2). Nu îl calcula aproximativ.
        - Folosește LaTeX ($...$) pentru toate formulele.
 
     2. FIZICĂ/CHIMIE:
        - Presupune automat "condiții ideale".
        - Tratează problema exact așa cum apare în culegere.
-       - Nu menționa frecarea cu aerul, pierderile de căldură sau imperfecțiunile aparatelor de măsură.
-       - Tratează problema exact așa cum apare în culegere, într-un univers matematic perfect.
 
     3. LIMBA ȘI LITERATURA ROMÂNĂ (CRITIC):
-       - Respectă STRICT programa școlară de BAC din România și canoanele criticii (G. Călinescu, E. Lovinescu, T. Vianu).
-       - ATENȚIE MAJORA: Ion Creangă (Harap-Alb) este Basm Cult, dar specificul lui este REALISMUL (umanizarea fantasticului, oralitatea), nu romantismul.
-       - La poezie: Încadrează corect (Romantism - Eminescu, Modernism - Blaga/Arghezi, Simbolism - Bacovia).
-       - Structurează răspunsurile ca un eseu de BAC (Ipoteză -> Argumente (pe text) -> Concluzie).
+       - Respectă STRICT programa școlară de BAC și criticii canonici.
+       - Ion Creangă (Harap-Alb) = REALISM (prin oralitate), nu romantism.
+       - Structurează răspunsurile ca un eseu de BAC (Ipoteză -> Argumente -> Concluzie).
 
-    4. STIL DE PREDARE:
-           - Explică simplu, cald și prietenos. Evită "limbajul de lemn".
-           - Folosește analogii pentru concepte grele (ex: "Curentul e ca debitul apei").
-           - La teorie: Definiție -> Exemplu Concret -> Aplicație.
-           - La probleme: Explică pașii logici ("Facem asta pentru că..."), nu da doar calculul.
-
-    5. MATERIALE UPLOADATE (Cărți/PDF):
-           - Dacă primești o carte, păstrează sensul original în rezumate/traduceri.
-           - Dacă elevul încarcă o poză sau un PDF, analizează tot conținutul înainte de a răspunde.
-           - Păstrează sensul original al textelor din manuale.
+    4. MATERIALE UPLOADATE:
+       - Analizează orice imagine/PDF înainte de a răspunde.
     """
 )
 
-# --- FUNCȚIE MAGICĂ PENTRU RETRY + STREAMING ---
+# --- FUNCȚIE MAGICĂ PENTRU RETRY ---
 def send_message_with_rotation(chat_session, payload):
-    max_retries = len(keys)
+    """
+    Încearcă să trimită mesajul. Dacă eșuează (limită atinsă), schimbă cheia și reîncearcă.
+    """
+    max_retries = len(keys) 
     
     for attempt in range(max_retries):
         try:
-            # ADĂUGAT: stream=True pentru viteză
-            response = chat_session.send_message(payload, stream=True)
+            response = chat_session.send_message(payload)
             return response
             
         except Exception as e:
             error_msg = str(e)
+            # Verificăm erorile de cotă
             if "429" in error_msg or "ResourceExhausted" in error_msg or "Quota" in error_msg:
                 st.toast(f"⚠️ Schimb motorul AI... (Cheia {st.session_state.key_index + 1} epuizată)", icon="🔄")
+                
+                # Trecem la următoarea cheie
                 st.session_state.key_index = (st.session_state.key_index + 1) % len(keys)
+                
+                # Reconfigurăm
                 configure_current_key()
                 continue
             else:
                 raise e
     
-    raise Exception("Toate serverele sunt ocupate momentan.")
+    raise Exception("Toate serverele sunt ocupate momentan. Te rog revino mai târziu.")
 
 # ==========================================
 # 4. Sidebar & Upload
@@ -239,27 +232,23 @@ with st.sidebar:
                 st.error(f"Eroare upload PDF: {e}")
 
 # ==========================================
-# 5. Chat Logic (CU STREAMING)
+# 5. Chat Logic
 # ==========================================
 
-# Încărcare istoric
 if "messages" not in st.session_state or not st.session_state.messages:
     st.session_state.messages = load_history_from_db(st.session_state.session_id)
 
-# Afișare mesaje vechi
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Input utilizator
 if user_input := st.chat_input("Scrie aici..."):
     
-    # 1. Afișăm inputul userului
     st.chat_message("user").write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
     save_message_to_db(st.session_state.session_id, "user", user_input)
 
-    # 2. Pregătim contextul
+    # Construim istoricul pentru AI
     history_obj = []
     for msg in st.session_state.messages[:-1]:
         role_gemini = "model" if msg["role"] == "assistant" else "user"
@@ -267,44 +256,32 @@ if user_input := st.chat_input("Scrie aici..."):
 
     chat_session = model.start_chat(history=history_obj)
 
+    # Payload
     final_payload = []
     if media_content:
-        final_payload.append("Analizează acest material:")
+        final_payload.append("Te rog să analizezi acest document/imagine atașat:")
         final_payload.append(media_content)
     final_payload.append(user_input)
 
-    # 3. Generăm răspunsul cu efect vizual
     with st.chat_message("assistant"):
-        message_placeholder = st.empty() # Locul unde vom scrie textul
-        full_response = ""
-        
-        try:
-            # Primim un "stream" (flux de date), nu textul complet
-            response_stream = send_message_with_rotation(chat_session, final_payload)
-            
-            # Iterăm prin bucățelele de text pe măsură ce vin
-            for chunk in response_stream:
-                if chunk.text:
-                    full_response += chunk.text
-                    # Actualizăm textul pe ecran + un cursor clipitor
-                    message_placeholder.markdown(full_response + "▌")
-            
-            # La final, afișăm textul curat (fără cursor)
-            message_placeholder.markdown(full_response)
-            
-            # 4. Salvăm totul la final
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            save_message_to_db(st.session_state.session_id, "assistant", full_response)
+        with st.spinner("Profesorul analizează..."):
+            try:
+                # AICI ERA GREȘEALA -> ACUM FOLOSIM FUNCȚIA DE RETRY
+                response = send_message_with_rotation(chat_session, final_payload)
+                text_response = response.text
+                
+                st.markdown(text_response)
+                
+                st.session_state.messages.append({"role": "assistant", "content": text_response})
+                save_message_to_db(st.session_state.session_id, "assistant", text_response)
 
-            # 5. Audio (Se execută DOAR după ce textul a apărut complet)
-            if enable_audio:
-                with st.spinner("Generez vocea..."):
-                    clean_text = full_response.replace("*", "").replace("$", "")[:500]
+                if enable_audio:
+                    clean_text = text_response.replace("*", "").replace("$", "")[:500]
                     if clean_text:
                         sound_file = BytesIO()
                         tts = gTTS(text=clean_text, lang='ro')
                         tts.write_to_fp(sound_file)
                         st.audio(sound_file, format='audio/mp3')
 
-        except Exception as e:
-            st.error(f"Eroare: {e}")
+            except Exception as e:
+                st.error(f"Eroare: {e}")
