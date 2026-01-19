@@ -15,8 +15,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🎓 Profesor Liceu - Asistent Virtual")
-st.caption("Matematică • Fizică • Chimie • Română | Bazat pe Gemini 1.5 Flash")
+st.title("🎓 Profesor Liceu")
+st.caption("Matematică • Fizică • Chimie • Română")
 
 # 2. Configurare API Key
 # Încearcă să ia cheia din secrets, altfel o cere în sidebar
