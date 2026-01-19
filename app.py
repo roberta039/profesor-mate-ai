@@ -76,8 +76,8 @@ else:
 # ==========================================
 
 # 1. Încărcăm lista de chei
-if "api_keys" in st.secrets:
-    keys = st.secrets["api_keys"]
+if "GOOGLE_API_KEY" in st.secrets:
+    keys = st.secrets["GOOGLE_API_KEY"]
 else:
     # Fallback dacă testezi local fără secrets și vrei input manual (doar prima cheie)
     k = st.sidebar.text_input("API Key:", type="password")
