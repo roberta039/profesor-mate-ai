@@ -74,8 +74,8 @@ else:
 # ==========================================
 # 3. Configurare API
 # ==========================================
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
+if "GOOGLE_API_KEYS" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEYS"]
 else:
     api_key = st.sidebar.text_input("Introdu Google API Key:", type="password")
 
