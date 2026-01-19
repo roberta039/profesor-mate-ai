@@ -99,7 +99,7 @@ def configure_current_key():
 configure_current_key()
 
 # Definim Modelul (Aici pui System Instruction-ul tău mare)
-model = genai.GenerativeModel("models/gemini-1.5-flash", 
+model = genai.GenerativeModel("models/gemini-2.5-flash", 
     system_instruction="... (AICI PUI PROMPTUL TĂU MARE) ..."
 )
 
