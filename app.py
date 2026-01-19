@@ -10,10 +10,8 @@ import tempfile
 import ast
 
 # 1. Configurare Pagină
-# initial_sidebar_state="expanded" forțează meniul să stea deschis la pornire
-st.set_page_config(page_title="Profesor Liceu AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Profesor Liceu AI", page_icon="🎓", layout="wide")
 
-# CSS: Am scos liniile care ascundeau header-ul și meniul!
 st.markdown("""
 <style>
     .stChatMessage { font-size: 16px; }
@@ -163,6 +161,7 @@ ROL: Ești un profesor de liceu din România, universal (Mate, Fizică, Chimie, 
            - Dacă elevul încarcă o poză sau un PDF, analizează tot conținutul înainte de a răspunde.
            - Păstrează sensul original al textelor din manuale.
     """
+)
 
 # Configurare Filtre de Siguranță
 safety_settings = [
@@ -174,7 +173,7 @@ safety_settings = [
 
 # --- FUNCȚIE AVANSATĂ: GENERATOR CU ROTIRE ---
 def run_chat_with_rotation(history_obj, payload):
-    max_retries = len(keys)
+    max_retries = len(keys) * 2 # Încercăm de două ori pe fiecare cheie dacă e nevoie
     
     for attempt in range(max_retries):
         try:
@@ -205,14 +204,23 @@ def run_chat_with_rotation(history_obj, payload):
 
         except Exception as e:
             error_msg = str(e)
-            if "400" in error_msg or "429" in error_msg or "ResourceExhausted" in error_msg or "Quota" in error_msg or "API key not valid" in error_msg:
-                st.toast(f"⚠️ Cheia {st.session_state.key_index + 1} are probleme. Trec la următoarea...", icon="🔄")
+            
+            # Gestionăm erorile 503 (Overloaded) și 429 (Quota)
+            if "503" in error_msg or "overloaded" in error_msg:
+                st.toast("🐢 Serverele Google sunt aglomerate. Mai încerc o dată...", icon="⏳")
+                time.sleep(2) # Așteptăm 2 secunde să își revină serverul
+                # Nu schimbăm neapărat cheia la 503, dar reîncercăm
+                continue
+                
+            elif "400" in error_msg or "429" in error_msg or "ResourceExhausted" in error_msg or "Quota" in error_msg or "API key not valid" in error_msg:
+                st.toast(f"⚠️ Schimb motorul AI (Cheia {st.session_state.key_index + 1})...", icon="🔄")
                 st.session_state.key_index = (st.session_state.key_index + 1) % len(keys)
                 continue
+                
             else:
                 raise e
     
-    raise Exception("Toate cheile API au eșuat. Verifică lista din secrets.")
+    raise Exception("Toate serverele sunt momentan indisponibile. Te rog încearcă peste 1 minut.")
 
 # ==========================================
 # 4. INTERFAȚĂ
