@@ -79,7 +79,7 @@ else:
 
 # Încărcăm cheile
 if "GOOGLE_API_KEY" in st.secrets:
-    keys = st.secrets["GOOGLE_API_KEYS"]
+    keys = st.secrets["GOOGLE_API_KEY"]
 elif "GOOGLE_API_KEY" in st.secrets:
     keys = [st.secrets["GOOGLE_API_KEY"]]
 else:
@@ -276,4 +276,38 @@ if user_input := st.chat_input("Scrie aici..."):
     # Pregătim payload-ul curent
     final_payload = []
     if media_content:
-        final_payload.append("Te rog să analizezi acest document/imagine 
+        final_payload.append("Te rog să analizezi acest document/imagine atașat:")
+        final_payload.append(media_content)
+    final_payload.append(user_input)
+
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        
+        try:
+            # APELĂM FUNCȚIA NOUĂ DE ROTIRE
+            # Ea returnează un generator de text (text_chunk)
+            stream_generator = run_chat_with_rotation(history_obj, final_payload)
+            
+            for text_chunk in stream_generator:
+                full_response += text_chunk
+                message_placeholder.markdown(full_response + "▌")
+            
+            message_placeholder.markdown(full_response)
+            
+            # Salvare
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            save_message_to_db(st.session_state.session_id, "assistant", full_response)
+
+            # Audio
+            if enable_audio:
+                with st.spinner("Generez vocea..."):
+                    clean_text = full_response.replace("*", "").replace("$", "")[:500]
+                    if clean_text:
+                        sound_file = BytesIO()
+                        tts = gTTS(text=clean_text, lang='ro')
+                        tts.write_to_fp(sound_file)
+                        st.audio(sound_file, format='audio/mp3')
+
+        except Exception as e:
+            st.error(f"A apărut o eroare neașteptată: {e}")
