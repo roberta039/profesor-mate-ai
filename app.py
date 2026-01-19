@@ -78,8 +78,8 @@ else:
 # ==========================================
 
 # Încărcăm cheile
-if "GOOGLE_API_KEY" in st.secrets:
-    keys = st.secrets["GOOGLE_API_KEY"]
+if "GOOGLE_API_KEYS" in st.secrets:
+    keys = st.secrets["GOOGLE_API_KEYS"]
 elif "GOOGLE_API_KEY" in st.secrets:
     keys = [st.secrets["GOOGLE_API_KEY"]]
 else:
@@ -99,7 +99,7 @@ if not keys:
 if "key_index" not in st.session_state:
     st.session_state.key_index = 0
 
-# --- PROMPT-UL SISTEMULUI (Definit o singură dată aici) ---
+# --- PROMPT-UL SISTEMULUI ---
 SYSTEM_PROMPT = """
 ROL: Ești un profesor de liceu din România, universal (Mate, Fizică, Chimie, Literatură), bărbat, cu experiență în pregătirea pentru BAC.
     
@@ -151,57 +151,48 @@ ROL: Ești un profesor de liceu din România, universal (Mate, Fizică, Chimie, 
            - Dacă elevul încarcă o poză sau un PDF, analizează tot conținutul înainte de a răspunde.
            - Păstrează sensul original al textelor din manuale.
     """
-)
 
 # --- FUNCȚIE AVANSATĂ: GENERATOR CU ROTIRE ---
 def run_chat_with_rotation(history_obj, payload):
     """
-    Această funcție gestionează tot: configurarea cheii, crearea modelului,
-    sesiunea de chat și streaming-ul. Dacă o cheie pică, o schimbă și reia totul de la zero.
+    Gestionează rotirea cheilor și recrearea modelului.
     """
     max_retries = len(keys)
     
     for attempt in range(max_retries):
         try:
-            # 1. Luăm cheia curentă și configurăm
+            # 1. Selectăm cheia curentă
             if st.session_state.key_index >= len(keys):
                  st.session_state.key_index = 0
             
             current_key = keys[st.session_state.key_index]
             genai.configure(api_key=current_key)
             
-            # 2. CREĂM MODELUL ȘI SESIUNEA AICI (CRITIC pentru rotire!)
-            # Trebuie recreate proaspăt cu noua cheie
+            # 2. CREĂM MODELUL ȘI SESIUNEA (CRITIC: În interiorul buclei)
             model = genai.GenerativeModel("models/gemini-2.5-flash", system_instruction=SYSTEM_PROMPT)
             chat = model.start_chat(history=history_obj)
             
             # 3. Trimitem mesajul
             response_stream = chat.send_message(payload, stream=True)
             
-            # 4. Returnăm bucățile de text (Yield)
-            # Iterăm AICI pentru a prinde eroarea în interiorul try/except-ul funcției
+            # 4. Returnăm textul bucată cu bucată
             for chunk in response_stream:
                 if chunk.text:
                     yield chunk.text
             
-            # Dacă am terminat cu succes, ieșim din funcție
+            # Dacă am terminat cu succes, ieșim
             return 
 
         except Exception as e:
             error_msg = str(e)
-            # Verificăm erorile specifice de expirare
+            # Verificăm erorile de expirare
             if "429" in error_msg or "ResourceExhausted" in error_msg or "Quota" in error_msg or "403" in error_msg:
-                # Notificare discretă
-                st.toast(f"⚠️ Cheia {st.session_state.key_index + 1} a expirat. Schimb pe următoarea...", icon="🔄")
-                print(f"Eroare cheie {st.session_state.key_index}: {e}")
+                st.toast(f"⚠️ Cheia {st.session_state.key_index + 1} a expirat. Schimb...", icon="🔄")
                 
-                # Schimbăm indexul pentru tura următoare
+                # Schimbăm indexul
                 st.session_state.key_index = (st.session_state.key_index + 1) % len(keys)
-                
-                # 'continue' va forța bucla 'for' să o ia de la capăt cu noua cheie
                 continue
             else:
-                # Dacă e altă eroare (ex: imagine coruptă), o aruncăm mai departe
                 raise e
     
     raise Exception("Toate cheile API sunt epuizate. Revino mai târziu.")
@@ -227,9 +218,9 @@ with st.sidebar:
     media_content = None 
     
     if uploaded_file:
-        file_type = uploaded_file.type
-        # Configuram cheia curenta si pt upload
+        # Configuram cheia curentă pt upload
         genai.configure(api_key=keys[st.session_state.key_index])
+        file_type = uploaded_file.type
 
         if "image" in file_type:
             media_content = Image.open(uploaded_file)
@@ -277,6 +268,7 @@ if user_input := st.chat_input("Scrie aici..."):
     # Pregătim payload-ul curent
     final_payload = []
     if media_content:
+        # Linia de mai jos a fost reparată să fie pe un singur rând
         final_payload.append("Te rog să analizezi acest document/imagine atașat:")
         final_payload.append(media_content)
     final_payload.append(user_input)
@@ -286,8 +278,7 @@ if user_input := st.chat_input("Scrie aici..."):
         full_response = ""
         
         try:
-            # APELĂM FUNCȚIA NOUĂ DE ROTIRE
-            # Ea returnează un generator de text (text_chunk)
+            # APELĂM FUNCȚIA DE ROTIRE
             stream_generator = run_chat_with_rotation(history_obj, final_payload)
             
             for text_chunk in stream_generator:
