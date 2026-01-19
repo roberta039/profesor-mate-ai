@@ -31,8 +31,8 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# --- CORECȚIE IMPORTANTĂ: Modelul corect este 1.5-flash ---
-FIXED_MODEL_ID = "models/gemini-1.5-flash"
+# --- CORECȚIE IMPORTANTĂ: Modelul corect este 2.5-flash ---
+FIXED_MODEL_ID = "models/gemini-2.5-flash"
 
 try:
     model = genai.GenerativeModel(
