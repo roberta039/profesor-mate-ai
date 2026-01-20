@@ -232,7 +232,7 @@ def run_chat_with_rotation(history_obj, payload):
 # ==========================================
 # 4. SIDEBAR & UPLOAD
 # ==========================================
-st.title("🎓 Profesor Liceu AI")
+st.title("🎓 Profesor Liceu")
 
 with st.sidebar:
     st.header("⚙️ Opțiuni")
