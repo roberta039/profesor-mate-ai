@@ -13,7 +13,7 @@ import re
 # ==========================================
 # 1. CONFIGURARE PAGINĂ & CSS
 # ==========================================
-st.set_page_config(page_title="Profesor Liceu AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Profesor Liceu", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
